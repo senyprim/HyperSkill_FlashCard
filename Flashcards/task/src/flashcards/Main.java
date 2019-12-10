@@ -7,10 +7,60 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+class Card{
+    private final static Pattern pattern=Pattern.compile("Card\\{term='([^']+)',\\sdefinition='([^']+)',\\serrorsCount=(\\d+)\\}");
+    public final String term;
+    public final String definition;
+    int errorsCount=0;
+    public Card(String term,String definition){
+        this.term=term;
+        this.definition=definition;
+    }
+    public void incErrors(){
+        errorsCount++;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Card card = (Card) o;
+        return Objects.equals(term, card.term) &&
+                Objects.equals(definition, card.definition);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(term, definition);
+    }
+
+    @Override
+    public String toString() {
+        return "Card{" +
+                "term='" + term + '\'' +
+                ", definition='" + definition + '\'' +
+                ", errorsCount=" + errorsCount +
+                '}';
+    }
+    public Card(String str){
+        Matcher matcher=pattern.matcher(str);
+        if (!matcher.matches()) {
+            throw new IllegalArgumentException("Wrong deserialize string");
+        }
+        matcher.reset();
+        matcher.find();
+        this.term=matcher.group(1);
+        this.definition=matcher.group(2);
+        this.errorsCount=Integer.parseInt(matcher.group(3));
+    }
+}
 class Cards{
 
-    private Map<String,String> cards=null;
+    private Map<String,Card> cards=null;
+    private Map<String,Card> indexDefinition=null;
 
     public int size(){return cards.size();}
     public void addCard(String term,String definition){
@@ -21,13 +71,24 @@ class Cards{
         if (isContainsDefinition(definition)){
             throw new IllegalArgumentException(String.format("The definition \"%s\" already exists.", definition));
         }
-        cards.put(term, definition);
+        Card card=new Card(term,definition);
+        cards.put(term,card);
+        indexDefinition.put(definition,card);
     }
+    public Card getCardByTerm(String term){
+        return cards.get(term);
+    }
+    public Card getCardByDefinition(String definition){
+        return indexDefinition.get(definition);
+    }
+
     public void removeCard(String term){
         if(term==null) return;
-        if(!isContainsTerm(term)){
+        Card card=getCardByTerm(term);
+        if(card==null){
             throw new IllegalArgumentException(String.format("Can't remove \"%s\": there is no such card.",term));
         }
+        indexDefinition.remove(card.definition);
         cards.remove(term);
     }
 
@@ -35,49 +96,42 @@ class Cards{
         return cards.containsKey(term);
     }
     public boolean isContainsDefinition(String definition){
-        return cards.containsValue(definition);
-    }
-
-    public String getTermByDefinition(String definition) {
-        if (definition==null) return null;
-        for(Map.Entry<String,String> card : cards.entrySet()){
-            if (card.getValue().equals(definition)){
-                return card.getKey();
-            }
-        }
-        return null;
-    }
-
-    public String getDefinitionByTerm(String term){
-        if (term==null) return null;
-        return cards.get(term);
+        return indexDefinition.containsKey(definition);
     }
 
     public String getFirstTerm(){
-        return String.valueOf(cards.keySet().toArray()[cards.size()-1]);
+        return cards.entrySet().iterator().next().getKey();
     }
 
     public int importCards(String fileName){
         try{
             List<String> lines=Files.readAllLines(Paths.get(fileName));
-            int count=lines.size()/2;
+            int count=lines.size();
             for(int i=0;i<count;i++){
-                cards.put(lines.get(i*2), lines.get(i*2+1));
+                Card card=new Card(lines.get(i));
+                if (isContainsTerm(card.term)){
+                    removeCard(card.term);
+                }
+                cards.put(card.term,card);
+                indexDefinition.put(card.definition,card);
             }
             return count;
         }
         catch(IOException e){
             throw new IllegalArgumentException(String.format("File not found"));
         }
-
     }
 
     public int exportCards(String fileName){
         try(FileWriter writer=new FileWriter(new File(fileName)))
         {
-            for(Map.Entry<String,String> card :cards.entrySet())
+            int size=cards.size();
+            for(Map.Entry<String,Card> card: cards.entrySet())
             {
-                writer.write(card.getKey()+"\n"+card.getValue()+"\n");
+                writer.write(card.getValue().toString());
+                if (--size>0) {
+                    writer.write('\n');
+                }
             }
         }
         catch(IOException e){
@@ -89,6 +143,7 @@ class Cards{
 
     public Cards() {
         this.cards=new LinkedHashMap<>(16,0.75f,true);
+        this.indexDefinition=new HashMap<>();
     }
 }
 
@@ -196,20 +251,19 @@ class CardsHelper{
     }
 
     public void askQuestion(){
-        String term=cards.getFirstTerm();
-        System.out.printf(QUESTION,term);
-        String definition=cards.getDefinitionByTerm(term);
+        Card card=cards.getCardByTerm(cards.getFirstTerm());
+        System.out.printf(QUESTION,card.term);
 
         String answer=scanner.nextLine();
-        String otherTerm=cards.getTermByDefinition(answer);
-        if (Objects.equals(answer, definition)){
+        Card otherCard=cards.getCardByDefinition(answer);
+        if (Objects.equals(card,otherCard)){
             System.out.printf(ANSWER_CORRECT);
         }
-        else if (otherTerm!=null){
-            System.out.printf(ANSWER_WRONG2,definition,otherTerm);
+        else if (otherCard!=null){
+            System.out.printf(ANSWER_WRONG2,card.definition,otherCard.term);
         }
         else {
-            System.out.printf(ANSWER_WRONG,definition);
+            System.out.printf(ANSWER_WRONG,card.definition);
         }
     }
 
@@ -218,7 +272,6 @@ class CardsHelper{
         int count=Integer.parseInt(scanner.nextLine());
         for(int i=0;i<count&&cards.size()>0;i++){
             askQuestion();
-            //System.out.println();
         }
     }
 
