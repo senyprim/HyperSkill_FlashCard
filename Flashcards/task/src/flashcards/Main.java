@@ -180,6 +180,10 @@ class Cards{
 
 class CardsHelper{
 
+    String startupImport=null;
+    String endExport=null;
+
+
     private final static  String INPUT_COMMAND="Input the action (add, remove, import, export, ask, exit):\n";
     private final static  String INPUT_TERM="The card:\n";
     private final static  String INPUT_DEFINITION="The definition of the card:\n";
@@ -244,11 +248,17 @@ class CardsHelper{
     }
 
     public void inputCommand(){
+        if (startupImport!=null){
+            printAndLog(FILE_LOAD_SUCCESSFUL,cards.importCards(this.startupImport));
+        }
         while(true){
             String command=inputFromConsole(INPUT_COMMAND);
             if (execCommand(command)) break;
         }
         printAndLog("Bye bye!\n");
+        if (endExport!=null){
+            printAndLog(FILE_SAVE_SUCCESSFUL,cards.exportCards(this.endExport));
+        }
     }
 
     public String inputTerm(){
@@ -356,17 +366,32 @@ class CardsHelper{
         cards.resetStat();
         printAndLog(RESET_STATISTIC);
     }
+    private void setStartupSettings(String[] args){
+        if (args.length<2) {
+            return;
+        }
+        int start=Arrays.asList(args).indexOf("-import");
+        if (start>=0&&args.length>start+1){
+            this.startupImport=args[start+1];
+        }
+        int end=Arrays.asList(args).indexOf("-export");
+        if (end>=0&&args.length>end+1){
+            this.endExport=args[end+1];
+        }
+    }
 
-    CardsHelper(Cards cards,Scanner scanner,List<String> log){
+    CardsHelper(Cards cards,Scanner scanner,List<String> log,String[] args){
         this.cards=cards;
         this.scanner=scanner;
         this.log=log;
+        setStartupSettings(args);
     }
 }
 
 public class Main {
     public static void main(String[] args) {
-        CardsHelper helper=new CardsHelper(new Cards(),new Scanner(System.in),new ArrayList<>());
+
+        CardsHelper helper=new CardsHelper(new Cards(),new Scanner(System.in),new ArrayList<>(),args);
         helper.inputCommand();
     }
 }
